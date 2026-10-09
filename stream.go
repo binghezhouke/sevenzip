@@ -25,6 +25,48 @@ func (z *Reader) Streams() []StreamInfo {
 	return result
 }
 
+// PackedRange is a compressed input's byte interval in the original ReaderAt.
+// Offsets include any executable prefix and the archive start header.
+type PackedRange struct {
+	Offset int64
+	Size   int64
+}
+
+// PackedRanges returns independently buffered inputs for a group's decoder.
+// The snapshot does not open decoders or retain the caller's ReaderAt.
+func (z *Reader) PackedRanges(index int) ([]PackedRange, error) {
+	if index < 0 || index >= z.si.Folders() {
+		return nil, fs.ErrInvalid
+	}
+	packed := 0
+	offset := z.si.packInfo.position
+	for i := 0; i < index; i++ {
+		for range z.si.unpackInfo.folder[i].packed {
+			size := z.si.packInfo.size[packed]
+			if size > math.MaxInt64 || offset > math.MaxInt64-size {
+				return nil, fs.ErrInvalid
+			}
+			offset += size
+			packed++
+		}
+	}
+	if z.start < 0 || offset > uint64(math.MaxInt64-z.start) {
+		return nil, fs.ErrInvalid
+	}
+	absolute := z.start + int64(offset)
+	result := make([]PackedRange, 0, len(z.si.unpackInfo.folder[index].packed))
+	for range z.si.unpackInfo.folder[index].packed {
+		size := z.si.packInfo.size[packed]
+		if absolute > z.end || size > uint64(z.end-absolute) {
+			return nil, fs.ErrInvalid
+		}
+		result = append(result, PackedRange{Offset: absolute, Size: int64(size)})
+		absolute += int64(size)
+		packed++
+	}
+	return result, nil
+}
+
 // StreamOffset returns the file's uncompressed byte offset in File.Stream.
 // Directories and empty files have no stream and return false.
 func (f *File) StreamOffset() (int64, bool) {
@@ -37,6 +79,19 @@ func (f *File) StreamOffset() (int64, bool) {
 // Close does not validate unread data. Multiple streams may be read concurrently.
 // The caller must keep the underlying ReaderAt available until Close.
 func (z *Reader) OpenStream(index int) (io.ReadCloser, error) {
+	return z.OpenStreamWithReader(index, z.r)
+}
+
+// OpenStreamWithReader decodes group content using r in the same absolute
+// coordinates as the original ReaderAt. Metadata has already been parsed.
+// The caller owns r, including cleanup on decoder construction failure.
+func (z *Reader) OpenStreamWithReader(index int, body io.ReaderAt) (io.ReadCloser, error) {
+	if body == nil {
+		return nil, fs.ErrInvalid
+	}
+	if _, err := z.PackedRanges(index); err != nil {
+		return nil, err
+	}
 	if index < 0 || index >= z.si.Folders() {
 		return nil, fs.ErrInvalid
 	}
@@ -45,7 +100,7 @@ func (z *Reader) OpenStream(index int) (io.ReadCloser, error) {
 	}
 	// Larger packed input reads avoid thousands of ReaderAt calls for network
 	// sources. Header parsing and File.Open retain their original buffering.
-	r, crc, encrypted, err := z.si.folderReaderBuffered(io.NewSectionReader(z.r, z.start, z.end-z.start), index, z.p, 1<<20)
+	r, crc, encrypted, err := z.si.folderReaderBuffered(io.NewSectionReader(body, z.start, z.end-z.start), index, z.p, 1<<20)
 	if err != nil {
 		return nil, &ReadError{Encrypted: encrypted, Err: err}
 	}

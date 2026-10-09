@@ -14,6 +14,11 @@ Additions for read-only filesystem backends:
   decoder failures in `ReadError`, and releases the decoder directly on Close.
   Group CRCs are optional; consumers still need per-member validation where
   required. Close is idempotent, and an early Close does not validate unread data.
+- `Reader.PackedRanges(index)` exposes validated absolute packed-input bounds.
+- `Reader.OpenStreamWithReader(index, readerAt)` injects a body source without
+  reparsing headers. The caller owns the source, including cleanup if opening
+  a decoder fails. This allows bounded remote read windows independently for
+  BCJ2 inputs and split archives without adding network policy to this library.
 - Group content reads use a 1 MiB packed-input buffer to reduce ReaderAt calls
   for remote sources. Header decoding and existing File.Open behavior retain
   the upstream buffer size.

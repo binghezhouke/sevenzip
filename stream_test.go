@@ -69,3 +69,79 @@ func TestStreamMatchesMembers(t *testing.T) {
 		})
 	}
 }
+
+// Only body reads go through the injected source; metadata remains independent.
+func TestPackedRangesAndInjectedBody(t *testing.T) {
+	for _, fixture := range []string{"lzma2.7z", "bcj2.7z", "copy.7z", "t2.7z"} {
+		for _, prefix := range []int{0, 123} {
+			t.Run(fixture+string(rune('A'+prefix)), func(t *testing.T) {
+				data, err := os.ReadFile("testdata/" + fixture)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = append(bytes.Repeat([]byte{0}, prefix), data...)
+				z, err := sevenzip.NewReaderWithPassword(bytes.NewReader(data), int64(len(data)), "password")
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, info := range z.Streams() {
+					ranges, err := z.PackedRanges(info.Index)
+					if err != nil {
+						t.Fatal(err)
+					}
+					source := &packedOnlyReader{t: t, r: bytes.NewReader(data), ranges: ranges}
+					actual, err := z.OpenStreamWithReader(info.Index, source)
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err := io.ReadAll(actual)
+					if err != nil {
+						t.Fatal(err)
+					}
+					actual.Close()
+					expected, err := z.OpenStream(info.Index)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want, err := io.ReadAll(expected)
+					if err != nil {
+						t.Fatal(err)
+					}
+					expected.Close()
+					if !bytes.Equal(got, want) {
+						t.Fatal("injected decoder differs")
+					}
+					if len(ranges) > 0 {
+						ranges[0].Offset = -1
+						fresh, _ := z.PackedRanges(info.Index)
+						if fresh[0].Offset < 0 {
+							t.Fatal("snapshot mutated reader")
+						}
+					}
+				}
+				if _, err := z.PackedRanges(-1); !errors.Is(err, os.ErrInvalid) {
+					t.Fatal(err)
+				}
+				if _, err := z.OpenStreamWithReader(0, nil); !errors.Is(err, os.ErrInvalid) {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+type packedOnlyReader struct {
+	t      *testing.T
+	r      io.ReaderAt
+	ranges []sevenzip.PackedRange
+}
+
+func (r *packedOnlyReader) ReadAt(p []byte, off int64) (int, error) {
+	for _, v := range r.ranges {
+		if off >= v.Offset && off+int64(len(p)) <= v.Offset+v.Size {
+			return r.r.ReadAt(p, off)
+		}
+	}
+	r.t.Errorf("body read outside packed intervals: %d + %d", off, len(p))
+	return 0, io.ErrUnexpectedEOF
+}
