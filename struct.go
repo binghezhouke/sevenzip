@@ -259,6 +259,10 @@ func (si *streamsInfo) folderOffset(folder int) int64 {
 
 //nolint:cyclop,funlen,lll
 func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) (*folderReadCloser, uint32, bool, error) {
+	return si.folderReaderBuffered(r, folder, password, 4096)
+}
+
+func (si *streamsInfo) folderReaderBuffered(r io.ReaderAt, folder int, password string, bufferSize int) (*folderReadCloser, uint32, bool, error) {
 	f := si.unpackInfo.folder[folder]
 	in := make([]io.ReadCloser, f.in)
 	out := make([]io.ReadCloser, f.out)
@@ -272,7 +276,7 @@ func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) 
 
 	for i, input := range f.packed {
 		size := int64(si.packInfo.size[packedOffset+i]) //nolint:gosec
-		in[input] = util.NopCloser(bufio.NewReader(io.NewSectionReader(r, si.folderOffset(folder)+offset, size)))
+		in[input] = util.NopCloser(bufio.NewReaderSize(io.NewSectionReader(r, si.folderOffset(folder)+offset, size), bufferSize))
 		offset += size
 	}
 
