@@ -50,6 +50,7 @@ var (
 	errUnexpectedID           = errors.New("sevenzip: unexpected id")
 	errMissingUnpackInfo      = errors.New("sevenzip: missing unpack info")
 	errWrongNumberOfFilenames = errors.New("sevenzip: wrong number of filenames")
+	errWrongNumberOfStreams   = errors.New("sevenzip: wrong number of streams")
 )
 
 func readUint64(r io.ByteReader) (uint64, error) {
@@ -854,6 +855,19 @@ func readHeader(r util.Reader) (*header, error) {
 
 	if h.streamsInfo == nil || h.filesInfo == nil {
 		return h, nil
+	}
+	if h.streamsInfo.subStreamsInfo == nil {
+		// Default mapping is one nonempty file per folder. Reject an
+		// inconsistent header before file ordinals become folder indices.
+		files := 0
+		for _, file := range h.filesInfo.file {
+			if !file.isEmptyStream {
+				files++
+			}
+		}
+		if files != h.streamsInfo.Folders() {
+			return nil, errWrongNumberOfStreams
+		}
 	}
 
 	j := 0

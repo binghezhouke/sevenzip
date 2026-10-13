@@ -214,7 +214,7 @@ func (si *streamsInfo) Folders() int {
 
 func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 	var (
-		folder  int
+		folder         = file // Without SubStreamsInfo, each folder has one file.
 		streams uint64 = 1
 	)
 
@@ -227,7 +227,6 @@ func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 				break
 			}
 		}
-
 	}
 	// The public file header and copied layout must use the same mapping
 	// from file ordinals to compact substream CRC slots.
