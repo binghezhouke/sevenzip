@@ -157,37 +157,6 @@ func (z *Reader) StreamLayout(index int) (*StreamLayout, error) {
 	return s, nil
 }
 
-func crcInfo(values []uint32, defined []bool, index int) CRCInfo {
-	if index >= 0 && index < len(values) && index < len(defined) && defined[index] {
-		return CRCInfo{Defined: true, Value: values[index]}
-	}
-	return CRCInfo{}
-}
-
-func (si *streamsInfo) fileCRC(file, folder int) CRCInfo {
-	streams := uint64(1)
-	if si.subStreamsInfo != nil && folder < len(si.subStreamsInfo.streams) {
-		streams = si.subStreamsInfo.streams[folder]
-	}
-	if streams == 1 {
-		if crc := crcInfo(si.unpackInfo.digest, si.unpackInfo.digestDefined, folder); crc.Defined {
-			return crc
-		}
-	}
-	if si.subStreamsInfo != nil {
-		// The header's substream digest list omits each single-substream
-		// folder that supplies its own CRC. file is a global nonempty-file
-		// ordinal, so remove those inherited entries before indexing it.
-		for i := 0; i < folder && i < len(si.subStreamsInfo.streams); i++ {
-			if si.subStreamsInfo.streams[i] == 1 && crcInfo(si.unpackInfo.digest, si.unpackInfo.digestDefined, i).Defined {
-				file--
-			}
-		}
-		return crcInfo(si.subStreamsInfo.digest, si.subStreamsInfo.digestDefined, file)
-	}
-	return CRCInfo{}
-}
-
 func validStreamFolder(f *folder) error {
 	if f == nil || len(f.coder) == 0 || f.in == 0 || f.out == 0 || uint64(len(f.size)) != f.out || uint64(len(f.bindPair)) != f.out-1 || uint64(len(f.bindPair)) > f.in || uint64(len(f.packed)) != f.in-uint64(len(f.bindPair)) || f.packedStreams != uint64(len(f.packed)) {
 		return fs.ErrInvalid

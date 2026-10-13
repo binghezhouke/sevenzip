@@ -407,8 +407,9 @@ func readUnpackInfo(r util.Reader) (*unpackInfo, error) {
 }
 
 //nolint:cyclop,funlen
-func readSubStreamsInfo(r util.Reader, folder []*folder) (*subStreamsInfo, error) {
+func readSubStreamsInfo(r util.Reader, unpack *unpackInfo) (*subStreamsInfo, error) {
 	s := new(subStreamsInfo)
+	folder := unpack.folder
 
 	id, err := r.ReadByte()
 	if err != nil {
@@ -466,7 +467,16 @@ func readSubStreamsInfo(r util.Reader, folder []*folder) (*subStreamsInfo, error
 	}
 
 	if id == idCRC {
-		if s.digest, s.digestDefined, err = readCRCDefined(r, files); err != nil {
+		// A single substream inherits a declared folder CRC and has no
+		// explicit slot in this compact digest table. Presence, not the
+		// checksum's numeric value, decides whether it inherits.
+		digests := files
+		for i, count := range s.streams {
+			if count == 1 && crcInfo(unpack.digest, unpack.digestDefined, i).Defined {
+				digests--
+			}
+		}
+		if s.digest, s.digestDefined, err = readCRCDefined(r, digests); err != nil {
 			return nil, err
 		}
 
@@ -519,7 +529,7 @@ func readStreamsInfo(r util.Reader) (*streamsInfo, error) {
 			return nil, errMissingUnpackInfo
 		}
 
-		if s.subStreamsInfo, err = readSubStreamsInfo(r, s.unpackInfo.folder); err != nil {
+		if s.subStreamsInfo, err = readSubStreamsInfo(r, s.unpackInfo); err != nil {
 			return nil, err
 		}
 

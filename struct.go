@@ -216,7 +216,6 @@ func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 	var (
 		folder  int
 		streams uint64 = 1
-		crc     uint32
 	)
 
 	if si.subStreamsInfo != nil {
@@ -229,20 +228,47 @@ func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 			}
 		}
 
-		if len(si.subStreamsInfo.digest) > 0 {
-			crc = si.subStreamsInfo.digest[file]
-		}
 	}
+	// The public file header and copied layout must use the same mapping
+	// from file ordinals to compact substream CRC slots.
+	crc := si.fileCRC(file, folder).Value
 
 	if streams == 1 {
-		if len(si.unpackInfo.digest) > 0 {
-			crc = si.unpackInfo.digest[folder]
-		}
-
 		return folder, si.unpackInfo.folder[folder].size[len(si.unpackInfo.folder[folder].coder)-1], crc
 	}
 
 	return folder, si.subStreamsInfo.size[file], crc
+}
+
+func crcInfo(values []uint32, defined []bool, index int) CRCInfo {
+	if index >= 0 && index < len(values) && index < len(defined) && defined[index] {
+		return CRCInfo{Defined: true, Value: values[index]}
+	}
+	return CRCInfo{}
+}
+
+func (si *streamsInfo) fileCRC(file, folder int) CRCInfo {
+	streams := uint64(1)
+	if si.subStreamsInfo != nil && folder < len(si.subStreamsInfo.streams) {
+		streams = si.subStreamsInfo.streams[folder]
+	}
+	if streams == 1 {
+		if crc := crcInfo(si.unpackInfo.digest, si.unpackInfo.digestDefined, folder); crc.Defined {
+			return crc
+		}
+	}
+	if si.subStreamsInfo != nil {
+		// The header's substream digest list omits each single-substream
+		// folder that supplies its own CRC. file is a global nonempty-file
+		// ordinal, so remove those inherited entries before indexing it.
+		for i := 0; i < folder && i < len(si.subStreamsInfo.streams); i++ {
+			if si.subStreamsInfo.streams[i] == 1 && crcInfo(si.unpackInfo.digest, si.unpackInfo.digestDefined, i).Defined {
+				file--
+			}
+		}
+		return crcInfo(si.subStreamsInfo.digest, si.subStreamsInfo.digestDefined, file)
+	}
+	return CRCInfo{}
 }
 
 func (si *streamsInfo) folderOffset(folder int) int64 {
