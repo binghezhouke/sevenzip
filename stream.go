@@ -9,6 +9,8 @@ import (
 	"github.com/bodgit/sevenzip/internal/util"
 )
 
+const ownedStreamPackedBufferSize = 1 << 20
+
 // StreamInfo describes one independently decoded stream (a solid group).
 // Index is the same identifier as File.Stream. Sizes and offsets are bytes.
 type StreamInfo struct {
@@ -117,7 +119,7 @@ func (z *Reader) OpenStreamWithReader(index int, body io.ReaderAt) (io.ReadClose
 	}
 	// Larger packed input reads avoid thousands of ReaderAt calls for network
 	// sources. Header parsing and File.Open retain their original buffering.
-	r, crc, encrypted, err := z.si.folderReaderBuffered(io.NewSectionReader(body, z.start, z.end-z.start), index, z.p, 1<<20)
+	r, crc, encrypted, err := z.si.folderReaderBuffered(io.NewSectionReader(body, z.start, z.end-z.start), index, z.p, ownedStreamPackedBufferSize)
 	if err != nil {
 		return nil, &ReadError{Encrypted: encrypted, Err: err}
 	}

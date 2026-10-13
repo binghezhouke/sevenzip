@@ -134,22 +134,24 @@ func readSizes(r io.ByteReader, count uint64) ([]uint64, error) {
 }
 
 func readCRC(r util.Reader, count uint64) ([]uint32, error) {
+	crcs, _, err := readCRCDefined(r, count)
+	return crcs, err
+}
+
+func readCRCDefined(r util.Reader, count uint64) ([]uint32, []bool, error) {
 	defined, err := readOptionalBool(r, count)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	crcs := make([]uint32, count)
-
 	for i := range defined {
 		if defined[i] {
 			if err := binary.Read(r, binary.LittleEndian, &crcs[i]); err != nil {
-				return nil, fmt.Errorf("readCRC: Read error: %w", err)
+				return nil, nil, fmt.Errorf("readCRC: Read error: %w", err)
 			}
 		}
 	}
-
-	return crcs, nil
+	return crcs, defined, nil
 }
 
 //nolint:cyclop
@@ -387,7 +389,7 @@ func readUnpackInfo(r util.Reader) (*unpackInfo, error) {
 	}
 
 	if id == idCRC {
-		if u.digest, err = readCRC(r, folders); err != nil {
+		if u.digest, u.digestDefined, err = readCRCDefined(r, folders); err != nil {
 			return nil, err
 		}
 
@@ -464,7 +466,7 @@ func readSubStreamsInfo(r util.Reader, folder []*folder) (*subStreamsInfo, error
 	}
 
 	if id == idCRC {
-		if s.digest, err = readCRC(r, files); err != nil {
+		if s.digest, s.digestDefined, err = readCRCDefined(r, files); err != nil {
 			return nil, err
 		}
 

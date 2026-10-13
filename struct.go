@@ -186,14 +186,16 @@ func (f *folder) unpackSize() uint64 {
 }
 
 type unpackInfo struct {
-	folder []*folder
-	digest []uint32
+	folder        []*folder
+	digest        []uint32
+	digestDefined []bool
 }
 
 type subStreamsInfo struct {
-	streams []uint64
-	size    []uint64
-	digest  []uint32
+	streams       []uint64
+	size          []uint64
+	digest        []uint32
+	digestDefined []bool
 }
 
 type streamsInfo struct {
