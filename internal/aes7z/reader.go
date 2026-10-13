@@ -96,7 +96,16 @@ func NewReader(p []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, erro
 	if len(readers) != 1 {
 		return nil, errNeedOneReader
 	}
+	rc, err := newParameters(p)
+	if err != nil {
+		return nil, err
+	}
+	rc.rc = readers[0]
+	return rc, nil
+}
 
+// Share the accepted property format between sequential and random readers.
+func newParameters(p []byte) (*readCloser, error) {
 	// Need at least two bytes initially
 	if len(p) < 2 {
 		return nil, errInsufficientProperties
@@ -120,7 +129,5 @@ func NewReader(p []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, erro
 	copy(rc.iv, p[2+salt:])
 
 	rc.cycles = int(p[0] & 0x3f)
-	rc.rc = readers[0]
-
 	return rc, nil
 }
