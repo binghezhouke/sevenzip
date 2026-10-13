@@ -14,13 +14,30 @@ import (
 type StreamInfo struct {
 	Index            int
 	UncompressedSize uint64
+	// Stored is true only for one Copy coder with no filters, properties, or
+	// encryption, one packed input, and matching packed/unpacked sizes. Its
+	// packed bytes are the uncompressed stream; direct reads do not verify CRCs.
+	Stored bool
 }
 
 // Streams returns a metadata snapshot without opening any content decoders.
 func (z *Reader) Streams() []StreamInfo {
 	result := make([]StreamInfo, z.si.Folders())
+	packed := 0
 	for i := range result {
-		result[i] = StreamInfo{Index: i, UncompressedSize: z.si.unpackInfo.folder[i].unpackSize()}
+		folder := z.si.unpackInfo.folder[i]
+		size := folder.unpackSize()
+		stored := false
+		if len(folder.coder) == 1 && folder.in == 1 && folder.out == 1 &&
+			len(folder.bindPair) == 0 && folder.packedStreams == 1 &&
+			len(folder.packed) == 1 && folder.packed[0] == 0 {
+			coder := folder.coder[0]
+			stored = len(coder.id) == 1 && coder.id[0] == 0 &&
+				len(coder.properties) == 0 && coder.in == 1 && coder.out == 1 &&
+				packed < len(z.si.packInfo.size) && z.si.packInfo.size[packed] == size
+		}
+		result[i] = StreamInfo{Index: i, UncompressedSize: size, Stored: stored}
+		packed += len(folder.packed)
 	}
 	return result
 }

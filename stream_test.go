@@ -130,6 +130,65 @@ func TestPackedRangesAndInjectedBody(t *testing.T) {
 	}
 }
 
+func TestStoredStreamMetadata(t *testing.T) {
+	for _, fixture := range []struct {
+		name   string
+		stored bool
+	}{
+		{"copy.7z", true},
+		{"lzma2.7z", false},
+		{"bcj2.7z", false},
+		{"t2.7z", false},
+		{"delta_copy_equal_sizes.7z", false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			data, err := os.ReadFile("testdata/" + fixture.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			z, err := sevenzip.NewReaderWithPassword(bytes.NewReader(data), int64(len(data)), "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			streams := z.Streams()
+			if len(streams) == 0 {
+				t.Fatal("fixture has no streams")
+			}
+			for _, stream := range streams {
+				if stream.Stored != fixture.stored {
+					t.Fatalf("stream %d Stored = %v, want %v", stream.Index, stream.Stored, fixture.stored)
+				}
+				if !stream.Stored && fixture.name != "delta_copy_equal_sizes.7z" {
+					continue
+				}
+				ranges, err := z.PackedRanges(stream.Index)
+				if err != nil || len(ranges) != 1 || uint64(ranges[0].Size) != stream.UncompressedSize {
+					t.Fatalf("equal-size stream ranges = %+v, %v", ranges, err)
+				}
+				r, err := z.OpenStream(stream.Index)
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded, err := io.ReadAll(r)
+				r.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				packed := data[ranges[0].Offset : ranges[0].Offset+ranges[0].Size]
+				if stream.Stored && !bytes.Equal(packed, decoded) {
+					t.Fatal("stored stream packed bytes differ from decoded content")
+				}
+				if fixture.name == "delta_copy_equal_sizes.7z" {
+					want := bytes.Repeat([]byte("AAAA-sevenzip-delta-noncopy\n"), 40)
+					if !bytes.Equal(decoded, want) || bytes.Equal(packed, want) {
+						t.Fatal("Delta+Copy fixture must decode to golden bytes while its equal-size packed bytes differ")
+					}
+				}
+			}
+		})
+	}
+}
+
 type packedOnlyReader struct {
 	t      *testing.T
 	r      io.ReaderAt
