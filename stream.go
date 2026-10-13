@@ -1,6 +1,7 @@
 package sevenzip
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"io/fs"
@@ -20,6 +21,8 @@ type StreamInfo struct {
 	// encryption, one packed input, and matching packed/unpacked sizes. Its
 	// packed bytes are the uncompressed stream; direct reads do not verify CRCs.
 	Stored bool
+	// Encrypted reports an AES coder in this body stream, independently of headers.
+	Encrypted bool
 }
 
 // Streams returns a metadata snapshot without opening any content decoders.
@@ -38,7 +41,11 @@ func (z *Reader) Streams() []StreamInfo {
 				len(coder.properties) == 0 && coder.in == 1 && coder.out == 1 &&
 				packed < len(z.si.packInfo.size) && z.si.packInfo.size[packed] == size
 		}
-		result[i] = StreamInfo{Index: i, UncompressedSize: size, Stored: stored}
+		encrypted := false
+		for _, coder := range folder.coder {
+			encrypted = encrypted || bytes.Equal(coder.id, []byte{0x06, 0xf1, 0x07, 0x01})
+		}
+		result[i] = StreamInfo{Index: i, UncompressedSize: size, Stored: stored, Encrypted: encrypted}
 		packed += len(folder.packed)
 	}
 	return result

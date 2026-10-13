@@ -204,3 +204,42 @@ func (r *packedOnlyReader) ReadAt(p []byte, off int64) (int, error) {
 	r.t.Errorf("body read outside packed intervals: %d + %d", off, len(p))
 	return 0, io.ErrUnexpectedEOF
 }
+
+func TestEncryptionMetadataNeedsNoAdditionalIO(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		header, body bool
+	}{
+		{"lzma2.7z", false, false}, {"copy.7z", false, false},
+		{"t2.7z", true, true}, {"t3.7z", true, true},
+		{"t4.7z", false, true}, {"t5.7z", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := os.ReadFile("testdata/" + tc.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := &layoutCountingSource{ReaderAt: bytes.NewReader(data)}
+			zr, err := sevenzip.NewReaderWithPassword(source, int64(len(data)), "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			reads := source.reads
+			if got := zr.HeadersEncrypted(); got != tc.header {
+				t.Fatalf("header encryption = %t, want %t", got, tc.header)
+			}
+			streams := zr.Streams()
+			if len(streams) == 0 {
+				t.Fatal("fixture has no body stream")
+			}
+			for _, stream := range streams {
+				if stream.Encrypted != tc.body {
+					t.Fatalf("body encryption = %t, want %t", stream.Encrypted, tc.body)
+				}
+			}
+			if source.reads != reads {
+				t.Fatal("metadata query read source")
+			}
+		})
+	}
+}

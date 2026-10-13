@@ -57,9 +57,15 @@ type Reader struct {
 	File  []*File
 	pool  []pool.Pooler
 
+	headersEncrypted bool
+
 	fileListOnce sync.Once
 	fileList     []fileListEntry
 }
+
+// HeadersEncrypted reports whether reopening the parsed archive header requires
+// a password. It uses parsed metadata without reading the source or deriving keys.
+func (z *Reader) HeadersEncrypted() bool { return z.headersEncrypted }
 
 // A ReadCloser is a [Reader] that must be closed when no longer needed.
 type ReadCloser struct {
@@ -490,6 +496,7 @@ func (z *Reader) init(r io.ReaderAt, size int64) (err error) {
 			}
 		}
 
+		z.headersEncrypted = fr.hasEncryption
 		defer func() {
 			err = errors.Join(err, fr.Close())
 		}()
