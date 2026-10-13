@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/bodgit/sevenzip/internal/aes7z"
 	"github.com/ulikunitz/xz/lzma"
 )
 
@@ -61,6 +62,57 @@ type LZMA2DecoderInfo struct {
 	DictionarySize       uint64
 	PackedBufferSize     uint64
 	MaxLiteralModelBytes uint64
+}
+
+// AESLZMA2DecoderInfo describes the built-in sequential AES-to-LZMA2 graph.
+// AdditionalMemoryBytes bounds AES buffering, including a buffer growth
+// transition, and fixed cipher state. It does not describe KDF CPU time, the
+// existing process-wide key cache, caller password storage or custom codecs.
+type AESLZMA2DecoderInfo struct {
+	LZMA2                 LZMA2DecoderInfo
+	AdditionalMemoryBytes uint64
+}
+
+// AESLZMA2DecoderInfo recognizes exactly one AES-256-CBC coder feeding one
+// LZMA2 coder, with one packed input. No source is read and no cipher or key is
+// constructed. Invalid properties/geometry return fs.ErrInvalid; other graphs
+// return ErrUnsupportedDecoderInfo. PlainLZMA2DecoderInfo remains unencrypted.
+// Built-in LZMA2 requests at most 32KiB from AES: compressed chunks use
+// ReadByte, and uncompressed chunks use io.CopyN's 32KiB copy buffer. AES may
+// round this up by 15 bytes. bytes.Buffer can retain 128KiB due to read offsets
+// and doubling; a growth can temporarily retain old/new buffers. 256KiB covers
+// that transition plus CBC state, IV, salt and reader structs. These facts do
+// not cover RegisterDecompressor overrides or arbitrary direct AES consumers.
+func (s *StreamLayout) AESLZMA2DecoderInfo() (*AESLZMA2DecoderInfo, error) {
+	if s == nil {
+		return nil, fs.ErrInvalid
+	}
+	if len(s.Coders) != 2 || s.Inputs != 2 || s.Outputs != 2 || len(s.BindPairs) != 1 ||
+		len(s.PackedIndices) != 1 || s.PackedIndices[0] != 0 || len(s.OutputSizes) != 2 || len(s.PackedRanges) != 1 ||
+		s.BindPairs[0] != (StreamBindPair{Input: 1, Output: 0}) {
+		return nil, ErrUnsupportedDecoderInfo
+	}
+	a, l := s.Coders[0], s.Coders[1]
+	if a.Inputs != 1 || a.Outputs != 1 || l.Inputs != 1 || l.Outputs != 1 ||
+		!bytes.Equal(a.ID, []byte{0x06, 0xf1, 0x07, 0x01}) || !bytes.Equal(l.ID, []byte{0x21}) {
+		return nil, ErrUnsupportedDecoderInfo
+	}
+	p := s.PackedRanges[0]
+	if err := aes7z.ValidateProperties(a.Properties); err != nil {
+		return nil, fs.ErrInvalid
+	}
+	if p.Offset < 0 || p.Size <= 0 || p.Size%16 != 0 || p.Offset > math.MaxInt64-p.Size ||
+		s.OutputSizes[0] == 0 || s.OutputSizes[0] > uint64(p.Size) || uint64(p.Size)-s.OutputSizes[0] >= 16 ||
+		s.UncompressedSize > math.MaxInt64 || s.OutputSizes[1] != s.UncompressedSize {
+		return nil, fs.ErrInvalid
+	}
+	plain := &StreamLayout{Inputs: 1, Outputs: 1, Coders: []StreamCoderInfo{l}, PackedIndices: []uint64{0},
+		OutputSizes: []uint64{s.UncompressedSize}, PackedRanges: []PackedRange{{Offset: p.Offset, Size: int64(s.OutputSizes[0])}}, UncompressedSize: s.UncompressedSize}
+	info, err := plain.PlainLZMA2DecoderInfo()
+	if err != nil {
+		return nil, err
+	}
+	return &AESLZMA2DecoderInfo{LZMA2: *info, AdditionalMemoryBytes: 256 << 10}, nil
 }
 
 // PlainLZMA2DecoderInfo recognizes only one unfiltered, unencrypted LZMA2 coder

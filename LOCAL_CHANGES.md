@@ -22,6 +22,14 @@ Additions for read-only filesystem backends:
 - Group content reads use a 1 MiB packed-input buffer to reduce ReaderAt calls
   for remote sources. Header decoding and existing File.Open behavior retain
   the upstream buffer size.
+- `StreamLayout.AESLZMA2DecoderInfo()` recognizes the canonical serial
+  AES-256-CBC to LZMA2 graph without reading source bytes or deriving a key.
+  It validates properties, bindings, packed input and padding geometry, and
+  exposes the existing LZMA2 costs plus a conservative 256 KiB AES charge,
+  including buffer growth. `PlainLZMA2DecoderInfo()` stays unencrypted.
+  These costs cover only built-in codecs, not registry overrides, KDF CPU,
+  process-wide key caching or caller password storage. Existing AES Close and
+  key derivation behavior is unchanged.
 
 The fork does not manage persistent caches, credentials, scheduling, request
 cancellation or cache budgets. These belong to the mount123 caller. No shared

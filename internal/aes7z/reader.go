@@ -106,28 +106,35 @@ func NewReader(p []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, erro
 
 // Share the accepted property format between sequential and random readers.
 func newParameters(p []byte) (*readCloser, error) {
+	if err := ValidateProperties(p); err != nil {
+		return nil, err
+	}
+	rc := new(readCloser)
+	salt := p[0]>>7&1 + p[1]>>4
+	rc.salt = p[2 : 2+salt]
+	rc.iv = make([]byte, aes.BlockSize)
+	copy(rc.iv, p[2+salt:])
+	rc.cycles = int(p[0] & 0x3f)
+	return rc, nil
+}
+
+// ValidateProperties checks the sequential decoder's accepted header shape.
+// It does not construct a decoder, derive a key or retain the properties.
+func ValidateProperties(p []byte) error {
 	// Need at least two bytes initially
 	if len(p) < 2 {
-		return nil, errInsufficientProperties
+		return errInsufficientProperties
 	}
 
 	if p[0]&0xc0 == 0 {
-		return nil, errUnsupportedMethod
+		return errUnsupportedMethod
 	}
-
-	rc := new(readCloser)
 
 	salt := p[0]>>7&1 + p[1]>>4
 	iv := p[0]>>6&1 + p[1]&0x0f
 
 	if len(p) != int(2+salt+iv) {
-		return nil, errInsufficientProperties
+		return errInsufficientProperties
 	}
-
-	rc.salt = p[2 : 2+salt]
-	rc.iv = make([]byte, aes.BlockSize)
-	copy(rc.iv, p[2+salt:])
-
-	rc.cycles = int(p[0] & 0x3f)
-	return rc, nil
+	return nil
 }

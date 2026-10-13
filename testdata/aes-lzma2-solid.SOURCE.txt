@@ -1,0 +1,20 @@
+Synthetic fixture generated for mount123; no user/cloud data.
+Three regular members member-a.bin, member-b.bin, member-c.bin; each4194317B.
+Each member repeats a16384B xorshift32 block (seed4100,4101,4102); operations:
+state ^= state<<13; state ^= state>>17; state ^= state<<5; emit lowbyte,
+with uint32 wrap. All input modes0644 and UTC mtime2000-01-01.
+
+7-Zip 25.01 Linux command (TZ=UTC LC_ALL=C):
+7z a -t7z -m0=LZMA2 -mx=1 -md=1m -ms=on -mmt=1 -mhc=off -mhe=off \
+ -mtm=off -mtc=off -mta=off -pmount-synthetic-password aes-lzma2-solid.7z \
+ member-a.bin member-b.bin member-c.bin
+
+Password is a public synthetic test credential: mount-synthetic-password.
+Uncompressed clear headers; one AES256-CBC→LZMA2 group with1MiB dictionary.
+7z CLI extracted each member and matched the independent generated payload.
+SHA2561926b3bc0b4ea3a377100ea4f7fc334ad1fbcaff208c6024f79fdf190a29f9ea.
+The generator's AES IV is random; fresh archives differ while decoded bytes
+and layout remain the same. This frozen fixture is52018B.
+
+Generated payload and fixture are copyright2026 mount123 contributors,
+licensed under the repository BSD-3-Clause LICENSE.
