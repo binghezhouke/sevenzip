@@ -877,7 +877,9 @@ func readHeader(r util.Reader) (*header, error) {
 			continue
 		}
 
-		_, h.filesInfo.file[i].UncompressedSize, h.filesInfo.file[i].CRC32 = h.streamsInfo.FileFolderAndSize(j)
+		_, size, checksum := h.streamsInfo.FileFolderAndSize(j)
+		h.filesInfo.file[i].UncompressedSize = size
+		h.filesInfo.file[i].CRC32 = checksum.Value
 		j++
 	}
 

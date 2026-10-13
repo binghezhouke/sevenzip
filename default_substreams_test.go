@@ -122,9 +122,15 @@ func TestDefaultSubstreamsIndependentFolders(t *testing.T) {
 						t.Errorf("member %d bytes=%x want=%x read=%v close=%v", ordinal, got, want.payload, readErr, closeErr)
 					}
 					if want.stream < 0 {
+						if got := file.Checksum(); got != (sevenzip.CRCInfo{}) {
+							t.Errorf("empty member checksum=%+v", got)
+						}
 						continue
 					}
 					crc := crc32.ChecksumIEEE(want.payload)
+					if got := file.Checksum(); got != (sevenzip.CRCInfo{Defined: true, Value: crc}) {
+						t.Errorf("member %d checksum=%+v", ordinal, got)
+					}
 					if file.Stream != want.stream || file.CRC32 != crc {
 						t.Errorf("member %d stream=%d CRC=%08x", ordinal, file.Stream, file.CRC32)
 					}

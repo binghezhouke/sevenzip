@@ -154,6 +154,9 @@ func testMixedCRCRead(t *testing.T, groups []mixedCRCGroup, absent, short bool) 
 		t.Fatalf("file count %d want%d", len(z.File), len(files))
 	}
 	for i, file := range z.File {
+		if got := file.Checksum(); got != want[i] {
+			t.Errorf("file%d checksum=%+v want=%+v", i, got, want[i])
+		}
 		if file.CRC32 != want[i].Value {
 			t.Errorf("file%d CRC=%08x want=%08x", i, file.CRC32, want[i].Value)
 		}

@@ -72,9 +72,20 @@ type ReadCloser struct {
 // [File.Open].
 type File struct {
 	FileHeader
-	zip    *Reader
-	folder int
-	offset int64
+	zip      *Reader
+	folder   int
+	offset   int64
+	checksum CRCInfo
+}
+
+// Checksum returns the parsed member checksum, distinguishing an absent CRC
+// from a declared zero. It does not read the source or construct a decoder.
+// Files with no data stream and a nil File return an undefined checksum.
+func (f *File) Checksum() CRCInfo {
+	if f == nil {
+		return CRCInfo{}
+	}
+	return f.checksum
 }
 
 type fileReader struct {
@@ -515,7 +526,7 @@ func (z *Reader) init(r io.ReaderAt, size int64) (err error) {
 			}
 
 			if !fh.isEmptyStream && !fh.isEmptyFile {
-				f.folder, _, _ = header.streamsInfo.FileFolderAndSize(j)
+				f.folder, _, f.checksum = header.streamsInfo.FileFolderAndSize(j)
 
 				// Make an exported copy of the folder index
 				f.Stream = f.folder

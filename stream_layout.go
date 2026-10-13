@@ -132,7 +132,6 @@ func (z *Reader) StreamLayout(index int) (*StreamLayout, error) {
 	for _, b := range f.bindPair {
 		s.BindPairs = append(s.BindPairs, StreamBindPair{Input: b.in, Output: b.out})
 	}
-	fileIndex := 0
 	position := int64(0)
 	for ordinal, file := range z.File {
 		if file == nil {
@@ -146,10 +145,9 @@ func (z *Reader) StreamLayout(index int) (*StreamLayout, error) {
 			if offset != position || offset < 0 || uint64(offset) > s.UncompressedSize || file.UncompressedSize > s.UncompressedSize-uint64(offset) {
 				return nil, fs.ErrInvalid
 			}
-			s.Members = append(s.Members, StreamMemberInfo{Ordinal: ordinal, Offset: offset, Size: file.UncompressedSize, CRC: z.si.fileCRC(fileIndex, file.folder)})
+			s.Members = append(s.Members, StreamMemberInfo{Ordinal: ordinal, Offset: offset, Size: file.UncompressedSize, CRC: file.Checksum()})
 			position += int64(file.UncompressedSize)
 		}
-		fileIndex++
 	}
 	if uint64(position) != s.UncompressedSize {
 		return nil, fs.ErrInvalid

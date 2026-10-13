@@ -212,7 +212,7 @@ func (si *streamsInfo) Folders() int {
 	return 0
 }
 
-func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
+func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, CRCInfo) {
 	var (
 		folder         = file // Without SubStreamsInfo, each folder has one file.
 		streams uint64 = 1
@@ -230,7 +230,7 @@ func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 	}
 	// The public file header and copied layout must use the same mapping
 	// from file ordinals to compact substream CRC slots.
-	crc := si.fileCRC(file, folder).Value
+	crc := si.fileCRC(file, folder)
 
 	if streams == 1 {
 		return folder, si.unpackInfo.folder[folder].size[len(si.unpackInfo.folder[folder].coder)-1], crc
