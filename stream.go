@@ -123,15 +123,17 @@ func (z *Reader) OpenStreamWithReader(index int, body io.ReaderAt) (io.ReadClose
 	if err != nil {
 		return nil, &ReadError{Encrypted: encrypted, Err: err}
 	}
-	return &streamReader{reader: r, crc: crc, remaining: r.Size()}, nil
+	defined := crcInfo(z.si.unpackInfo.digest, z.si.unpackInfo.digestDefined, index).Defined
+	return &streamReader{reader: r, crc: crc, crcDefined: defined, remaining: r.Size()}, nil
 }
 
 type streamReader struct {
-	reader    *folderReadCloser
-	crc       uint32
-	remaining int64
-	err       error
-	closed    bool
+	reader     *folderReadCloser
+	crc        uint32
+	crcDefined bool
+	remaining  int64
+	err        error
+	closed     bool
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
@@ -152,7 +154,7 @@ func (r *streamReader) Read(p []byte) (int, error) {
 	if err == nil && r.remaining == 0 {
 		err = io.EOF
 	}
-	if err == io.EOF && r.crc != 0 && !util.CRC32Equal(r.reader.Checksum(), r.crc) {
+	if err == io.EOF && r.crcDefined && !util.CRC32Equal(r.reader.Checksum(), r.crc) {
 		err = errChecksum
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
